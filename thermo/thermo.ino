@@ -72,7 +72,7 @@ void loop() {
     lcd.setCursor(10, 1);
     lcd.print("L:");
     lcd.print(lampStatus);
-    lcd.print("  ");
+    lcd.print(" ");
   }
 
   WiFiClient client = server.available();
