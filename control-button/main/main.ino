@@ -10,8 +10,22 @@ void setup() {
   pinMode(ledPin, OUTPUT);
 
   WiFi.begin(SECRET_SSID, SECRET_PASS);
-  while (WiFi.status() != WL_CONNECTED) delay(1000);
 
+  const unsigned long wifiConnectTimeoutMs = 15000;
+  unsigned long wifiStartTime = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - wifiStartTime < wifiConnectTimeoutMs) {
+    delay(1000);
+  }
+
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("WiFi connection failed");
+    while (true) {
+      digitalWrite(ledPin, HIGH);
+      delay(250);
+      digitalWrite(ledPin, LOW);
+      delay(250);
+    }
+  }
   server.begin();
   Serial.println(WiFi.localIP());
 }
