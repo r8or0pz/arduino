@@ -52,11 +52,15 @@ void loop() {
       DeserializationError error = deserializeJson(doc, client);
 
       if (!error) {
-        const char* status = doc["status"];
-        if (strcmp(status, "on") == 0) digitalWrite(ledPin, HIGH);
-        else if (strcmp(status, "off") == 0) digitalWrite(ledPin, LOW);
+        if (!doc["status"].is<const char*>()) {
+          sendResponse(client, 400, "Bad Request");
+        } else {
+          const char* status = doc["status"].as<const char*>();
+          if (strcmp(status, "on") == 0) digitalWrite(ledPin, HIGH);
+          else if (strcmp(status, "off") == 0) digitalWrite(ledPin, LOW);
 
-        sendResponse(client, 200, "OK");
+          sendResponse(client, 200, "OK");
+        }
       } else {
         sendResponse(client, 400, "Bad Request");
       }
