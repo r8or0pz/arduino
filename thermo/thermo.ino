@@ -99,15 +99,25 @@ void processRequest(WiFiClient& client) {
     DeserializationError error = deserializeJson(doc, client);
 
     if (!error) {
-      const char* status = doc["status"];
-      if (strcmp(status, "on") == 0) {
-        digitalWrite(ledPin, HIGH);
-        lampStatus = "ON ";
-      } else if (strcmp(status, "off") == 0) {
-        digitalWrite(ledPin, LOW);
-        lampStatus = "OFF";
+      JsonVariant statusValue = doc["status"];
+      if (!statusValue.is<const char*>()) {
+        sendResponse(client, 400, "Bad Request");
+      } else {
+        const char* status = statusValue.as<const char*>();
+        if (status == nullptr) {
+          sendResponse(client, 400, "Bad Request");
+        } else if (strcmp(status, "on") == 0) {
+          digitalWrite(ledPin, HIGH);
+          lampStatus = "ON ";
+          sendResponse(client, 200, "OK");
+        } else if (strcmp(status, "off") == 0) {
+          digitalWrite(ledPin, LOW);
+          lampStatus = "OFF";
+          sendResponse(client, 200, "OK");
+        } else {
+          sendResponse(client, 400, "Bad Request");
+        }
       }
-      sendResponse(client, 200, "OK");
     } else {
       sendResponse(client, 400, "Bad Request");
     }
