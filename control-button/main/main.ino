@@ -33,19 +33,27 @@ void setup() {
 void loop() {
   WiFiClient client = server.available();
   if (client) {
-    String requestLine = "";
-String readHttpLine(WiFiClient& client) {
-  String line = "";
-  unsigned long start = millis();
-  while (client.connected() && (millis() - start) < 2000) {
-    while (client.available()) {
-      char c = client.read();
-      if (c == '\r') continue;
-      if (c == '\n') return line;
-      line += c;
+    client.setTimeout(1000);
+
+    if (!client.connected()) {
+      client.stop();
+      return;
     }
-  }
-  return line;
+
+    String requestLine = client.readStringUntil('\n');
+    requestLine.trim();
+    if (requestLine.length() == 0) {
+      client.stop();
+      return;
+    }
+
+    // Проверка эндпоинта и метода
+    if (requestLine.indexOf("POST /api/lamp") >= 0) {
+      // Пропускаем заголовки до тела JSON
+      while (client.connected()) {
+        String line = client.readStringUntil('\n');
+        line.trim();
+        if (line.length() == 0) break;
 }
 
 bool readRequestBody(WiFiClient& client, size_t contentLength, String& body) {
