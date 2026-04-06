@@ -15,6 +15,7 @@ WiFiServer server(80);
 
 String lampStatus = "OFF";
 unsigned long lastSensorUpdate = 0;
+const unsigned long REQUEST_TIMEOUT = 5000;
 
 void setup() {
   Serial.begin(115200);
@@ -71,8 +72,11 @@ void loop() {
 
     lcd.setCursor(10, 1);
     lcd.print("L:");
-    lcd.print(lampStatus);
-    lcd.print(" ");
+    if (digitalRead(ledPin) == HIGH) {
+      lcd.print("ON ");
+    } else {
+      lcd.print("OFF");
+    }
   }
 
   WiFiClient client = server.available();
@@ -82,47 +86,53 @@ void loop() {
 }
 
 void processRequest(WiFiClient& client) {
+  unsigned long requestStart = millis();
   String requestLine = "";
-  while (client.connected() && client.available()) {
-    char c = client.read();
-    if (c == '\n') break;
-    requestLine += c;
+
+  // Read request line with timeout
+  while (client.connected() && (millis() - requestStart) < REQUEST_TIMEOUT) {
+    if (client.available()) {
+      requestLine = client.readStringUntil('\r');
+      client.readStringUntil('\n');
+      break;
+    }
+  }
+
+  if (requestLine.isEmpty()) {
+    client.stop();
+    return;
   }
 
   if (requestLine.indexOf("POST /api/lamp") >= 0) {
-    while (client.available()) {
-      String line = client.readStringUntil('\n');
-      if (line.endsWith("\r")) {
-        line.remove(line.length() - 1);
+    // Skip HTTP headers with timeout
+    while (client.connected() && (millis() - requestStart) < REQUEST_TIMEOUT) {
+      if (client.available()) {
+        String line = client.readStringUntil('\n');
+        if (line == "\r" || line == "") break;
       }
-      if (line.length() == 0) break;
     }
 
     StaticJsonDocument<128> doc;
     DeserializationError error = deserializeJson(doc, client);
 
-    if (!error) {
-      JsonVariant statusValue = doc["status"];
-      if (!statusValue.is<const char*>()) {
-        sendResponse(client, 400, "Bad Request");
-      } else {
-        const char* status = statusValue.as<const char*>();
-        if (status == nullptr) {
-          sendResponse(client, 400, "Bad Request");
-        } else if (strcmp(status, "on") == 0) {
+    if (!error && doc.containsKey("status")) {
+      const char* status = doc["status"].as<const char*>();
+
+      if (status != nullptr) {
+        if (strcmp(status, "on") == 0) {
           digitalWrite(ledPin, HIGH);
-          lampStatus = "ON ";
           sendResponse(client, 200, "OK");
         } else if (strcmp(status, "off") == 0) {
           digitalWrite(ledPin, LOW);
-          lampStatus = "OFF";
           sendResponse(client, 200, "OK");
         } else {
-          sendResponse(client, 400, "Bad Request");
+          sendResponse(client, 400, "Invalid Status");
         }
+      } else {
+        sendResponse(client, 400, "Bad Request");
       }
     } else {
-      sendResponse(client, 400, "Bad Request");
+      sendResponse(client, 400, "Malformed JSON");
     }
   } else if (requestLine.indexOf("/api/lamp") >= 0) {
     sendResponse(client, 405, "Method Not Allowed");
