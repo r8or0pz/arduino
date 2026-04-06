@@ -91,8 +91,11 @@ void processRequest(WiFiClient& client) {
 
   if (requestLine.indexOf("POST /api/lamp") >= 0) {
     while (client.available()) {
-      String line = client.readStringUntil('\r');
-      if (line == "\n") break;
+      String line = client.readStringUntil('\n');
+      if (line.endsWith("\r")) {
+        line.remove(line.length() - 1);
+      }
+      if (line.length() == 0) break;
     }
 
     StaticJsonDocument<128> doc;
