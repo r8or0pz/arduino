@@ -1,56 +1,142 @@
-#include <Wire.h>
+#include "WiFiS3.h"
+#include <ArduinoJson.h>
 #include <LiquidCrystal_I2C.h>
+#include <Wire.h>
 #include "DHT.h"
-
+#include "secrets.h"
 
 #define DHTPIN 2
 #define DHTTYPE DHT11
-DHT dht(DHTPIN, DHTTYPE);
+const int ledPin = 3; // Сюда подключаем контакт "S"
 
-// Настройки дисплея (адрес 0x27, 16 символов, 2 строки)
+DHT dht(DHTPIN, DHTTYPE);
 LiquidCrystal_I2C lcd(0x27, 16, 2);
+WiFiServer server(80);
+
+String lampStatus = "OFF";
+unsigned long lastSensorUpdate = 0;
 
 void setup() {
-  // Инициализация датчика и дисплея
+  Serial.begin(115200);
+  pinMode(ledPin, OUTPUT);
+  digitalWrite(ledPin, LOW);
+
   dht.begin();
-  
   lcd.init();
   lcd.backlight();
-  
-  // Стартовое сообщение
+
   lcd.setCursor(0, 0);
-  lcd.print("Misha's Station");
-  lcd.setCursor(0, 1);
-  lcd.print("Loading...");
-  delay(2000);
-  lcd.clear();
+  lcd.print("WiFi Connect...");
+
+  WiFi.begin(SECRET_SSID, SECRET_PASS);
+
+  int retry = 0;
+  while (WiFi.status() != WL_CONNECTED && retry < 20) {
+    delay(1000);
+    retry++;
+    Serial.print(".");
+  }
+
+  if (WiFi.status() == WL_CONNECTED) {
+    server.begin();
+    lcd.clear();
+  } else {
+    lcd.clear();
+    lcd.print("WiFi Error!");
+  }
 }
 
 void loop() {
+  unsigned long currentMillis = millis();
 
-  float h = dht.readHumidity();
-  float t = dht.readTemperature();
+  if (currentMillis - lastSensorUpdate >= 2000) {
+    lastSensorUpdate = currentMillis;
 
-  // Проверка на ошибки
-  if (isnan(h) || isnan(t)) {
+    float h = dht.readHumidity();
+    float t = dht.readTemperature();
+
+    // ВЫВОД IP: Убрали двоеточие, чтобы влезли все цифры
     lcd.setCursor(0, 0);
-    lcd.print("Sensor Error!  ");
-  } else {
-    // Вывод температуры
-    lcd.setCursor(0, 0);
-    lcd.print("Temp: ");
-    lcd.print((int)t); // Целое число для экономии места
-    lcd.print(" C");
-    lcd.print("      "); // Очистка хвоста строки
+    lcd.print(WiFi.localIP());
+    lcd.print("    ");
 
-    // Вывод влажности
+    // ВЫВОД ДАТЧИКОВ И ЛАМПЫ
     lcd.setCursor(0, 1);
-    lcd.print("Hum:  ");
-    lcd.print((int)h);
-    lcd.print(" %");
-    lcd.print("      ");
+    if (isnan(h) || isnan(t)) {
+      lcd.print("Err ");
+    } else {
+      lcd.print((int)t); lcd.print("C ");
+      lcd.print((int)h); lcd.print("% ");
+    }
+
+    lcd.setCursor(10, 1);
+    lcd.print("L:");
+    lcd.print(lampStatus);
+    lcd.print(" ");
   }
 
-  // Обновляем раз в 2 секунды (DHT11 не любит чаще)
-  delay(2000);
+  WiFiClient client = server.available();
+  if (client) {
+    processRequest(client);
+  }
+}
+
+void processRequest(WiFiClient& client) {
+  String requestLine = "";
+  while (client.connected() && client.available()) {
+    char c = client.read();
+    if (c == '\n') break;
+    requestLine += c;
+  }
+
+  if (requestLine.indexOf("POST /api/lamp") >= 0) {
+    while (client.available()) {
+      String line = client.readStringUntil('\n');
+      if (line.endsWith("\r")) {
+        line.remove(line.length() - 1);
+      }
+      if (line.length() == 0) break;
+    }
+
+    StaticJsonDocument<128> doc;
+    DeserializationError error = deserializeJson(doc, client);
+
+    if (!error) {
+      JsonVariant statusValue = doc["status"];
+      if (!statusValue.is<const char*>()) {
+        sendResponse(client, 400, "Bad Request");
+      } else {
+        const char* status = statusValue.as<const char*>();
+        if (status == nullptr) {
+          sendResponse(client, 400, "Bad Request");
+        } else if (strcmp(status, "on") == 0) {
+          digitalWrite(ledPin, HIGH);
+          lampStatus = "ON ";
+          sendResponse(client, 200, "OK");
+        } else if (strcmp(status, "off") == 0) {
+          digitalWrite(ledPin, LOW);
+          lampStatus = "OFF";
+          sendResponse(client, 200, "OK");
+        } else {
+          sendResponse(client, 400, "Bad Request");
+        }
+      }
+    } else {
+      sendResponse(client, 400, "Bad Request");
+    }
+  } else if (requestLine.indexOf("/api/lamp") >= 0) {
+    sendResponse(client, 405, "Method Not Allowed");
+  } else {
+    sendResponse(client, 404, "Not Found");
+  }
+  delay(10);
+  client.stop();
+}
+
+void sendResponse(WiFiClient& client, int code, String msg) {
+  client.print("HTTP/1.1 "); client.print(code); client.print(" "); client.println(msg);
+  client.println("Content-Type: application/json");
+  client.println("Connection: close");
+  client.println();
+  client.print("{\"result\":\""); client.print(msg); client.println("\"}");
 }
