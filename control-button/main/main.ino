@@ -34,35 +34,77 @@ void loop() {
   WiFiClient client = server.available();
   if (client) {
     String requestLine = "";
-    while (client.connected() && client.available()) {
+String readHttpLine(WiFiClient& client) {
+  String line = "";
+  unsigned long start = millis();
+  while (client.connected() && (millis() - start) < 2000) {
+    while (client.available()) {
       char c = client.read();
-      if (c == '\n') break;
-      requestLine += c;
+      if (c == '\r') continue;
+      if (c == '\n') return line;
+      line += c;
+    }
+  }
+  return line;
+}
+
+bool readRequestBody(WiFiClient& client, size_t contentLength, String& body) {
+  body = "";
+  body.reserve(contentLength);
+
+  unsigned long start = millis();
+  while (client.connected() && body.length() < contentLength && (millis() - start) < 2000) {
+    while (client.available() && body.length() < contentLength) {
+      body += (char)client.read();
+      start = millis();
+    }
+  }
+
+  return body.length() == contentLength;
+}
+
+void loop() {
+  WiFiClient client = server.available();
+  if (client) {
+    String requestLine = readHttpLine(client);
+
+    int contentLength = -1;
+    while (client.connected()) {
+      String line = readHttpLine(client);
+      if (line.length() == 0) break;
+
+      if (line.startsWith("Content-Length:")) {
+        String value = line.substring(String("Content-Length:").length());
+        value.trim();
+        contentLength = value.toInt();
+      }
     }
 
     // Проверка эндпоинта и метода
     if (requestLine.indexOf("POST /api/lamp") >= 0) {
-      // Пропускаем заголовки до тела JSON
-      while (client.available()) {
-        String line = client.readStringUntil('\r');
-        if (line == "\n") break;
-      }
-
-      StaticJsonDocument<128> doc;
-      DeserializationError error = deserializeJson(doc, client);
-
-      if (!error) {
-        if (!doc["status"].is<const char*>()) {
+      if (contentLength <= 0) {
+        sendResponse(client, 400, "Bad Request");
+      } else {
+        String body;
+        if (!readRequestBody(client, (size_t)contentLength, body)) {
           sendResponse(client, 400, "Bad Request");
         } else {
-          const char* status = doc["status"].as<const char*>();
-          if (strcmp(status, "on") == 0) digitalWrite(ledPin, HIGH);
-          else if (strcmp(status, "off") == 0) digitalWrite(ledPin, LOW);
+          StaticJsonDocument<128> doc;
+          DeserializationError error = deserializeJson(doc, body);
 
-          sendResponse(client, 200, "OK");
+          if (!error) {
+            const char* status = doc["status"];
+            if (status != NULL) {
+              if (strcmp(status, "on") == 0) digitalWrite(ledPin, HIGH);
+              else if (strcmp(status, "off") == 0) digitalWrite(ledPin, LOW);
+              sendResponse(client, 200, "OK");
+            } else {
+              sendResponse(client, 400, "Bad Request");
+            }
+          } else {
+            sendResponse(client, 400, "Bad Request");
+          }
         }
-      } else {
-        sendResponse(client, 400, "Bad Request");
       }
     } else if (requestLine.indexOf("/api/lamp") >= 0) {
       sendResponse(client, 405, "Method Not Allowed");
