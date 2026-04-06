@@ -1,8 +1,6 @@
 #include "WiFiS3.h"
 #include <ArduinoJson.h>
-
-const char* ssid = "YOUR_WIFI_SSID";
-const char* password = "YOUR_WIFI_PASSWORD";
+#include "secrets.h"
 
 WiFiServer server(80);
 const int ledPin = 2; // Пин для внешнего светодиода
@@ -11,7 +9,7 @@ void setup() {
   Serial.begin(115200);
   pinMode(ledPin, OUTPUT);
 
-  WiFi.begin(ssid, password);
+  WiFi.begin(SECRET_SSID, SECRET_PASS);
   while (WiFi.status() != WL_CONNECTED) delay(1000);
 
   server.begin();
