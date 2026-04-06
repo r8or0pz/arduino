@@ -60,6 +60,10 @@ void loop() {
       } else {
         sendResponse(client, 400, "Bad Request");
       }
+    } else if (requestLine.indexOf("/api/lamp") >= 0) {
+      sendResponse(client, 405, "Method Not Allowed");
+    } else {
+      sendResponse(client, 404, "Not Found");
     }
     client.stop();
   }
