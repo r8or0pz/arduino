@@ -13,7 +13,10 @@ const int ledPin = 3;
 // Objects
 DHT dht(DHTPIN, DHTTYPE);
 WiFiServer server(80);
-LiquidCrystal_I2C lcd(0x27, 16, 2); 
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+// Try DHT22 if DHT11 fails
+// #define DHTTYPE DHT22
 
 // Global state
 String lampStatus = "OFF";
@@ -21,8 +24,8 @@ unsigned long lastSensorUpdate = 0;
 
 void setup() {
   Serial.begin(115200);
-  delay(2000); 
-  
+  delay(2000);
+
   dht.begin();
   lcd.init();
   lcd.backlight();
@@ -37,9 +40,9 @@ void setup() {
   Serial.println(SECRET_SSID);
   lcd.setCursor(0, 1);
   lcd.print("WiFi: Connect...");
-  
+
   WiFi.begin(SECRET_SSID, SECRET_PASS);
-  
+
   int attempts = 0;
   while (WiFi.status() != WL_CONNECTED && attempts < 15) {
     delay(1000);
@@ -73,6 +76,13 @@ void loop() {
 
     float h = dht.readHumidity();
     float t = dht.readTemperature();
+
+    // Debug sensor values to Serial
+    Serial.print("Humidity: ");
+    Serial.print(h);
+    Serial.print("%  Temperature: ");
+    Serial.print(t);
+    Serial.println("°C");
 
     // Line 1: Clear and show IP
     lcd.setCursor(0, 0);
