@@ -1,123 +1,132 @@
 #include "WiFiS3.h"
 #include <ArduinoJson.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+#include "DHT.h"
 #include "secrets.h"
 
+// Hardware configuration
+#define DHTPIN 2
+#define DHTTYPE DHT11
+const int ledPin = 3;
+
+// Objects
+DHT dht(DHTPIN, DHTTYPE);
 WiFiServer server(80);
-const int ledPin = 2; // Пин для внешнего светодиода
+LiquidCrystal_I2C lcd(0x27, 16, 2); 
+
+// Global state
+String lampStatus = "OFF";
+unsigned long lastSensorUpdate = 0;
 
 void setup() {
   Serial.begin(115200);
+  delay(2000); 
+  
+  dht.begin();
+  lcd.init();
+  lcd.backlight();
+  lcd.setCursor(0, 0);
+  lcd.print("Starting...");
+
+  Serial.println("Starting...");
   pinMode(ledPin, OUTPUT);
+  digitalWrite(ledPin, LOW);
 
+  Serial.print("Connecting to WiFi: ");
+  Serial.println(SECRET_SSID);
+  lcd.setCursor(0, 1);
+  lcd.print("WiFi: Connect...");
+  
   WiFi.begin(SECRET_SSID, SECRET_PASS);
-
-  const unsigned long wifiConnectTimeoutMs = 15000;
-  unsigned long wifiStartTime = millis();
-  while (WiFi.status() != WL_CONNECTED && millis() - wifiStartTime < wifiConnectTimeoutMs) {
+  
+  int attempts = 0;
+  while (WiFi.status() != WL_CONNECTED && attempts < 15) {
     delay(1000);
+    Serial.print(".");
+    attempts++;
   }
 
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("WiFi connection failed");
-    while (true) {
-      digitalWrite(ledPin, HIGH);
-      delay(250);
-      digitalWrite(ledPin, LOW);
-      delay(250);
-    }
-  }
   server.begin();
-  Serial.println(WiFi.localIP());
+  lcd.clear();
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("\nWiFi connected!");
+    int ip_retry = 0;
+    while (WiFi.localIP().toString() == "0.0.0.0" && ip_retry < 10) {
+      delay(500);
+      ip_retry++;
+    }
+    Serial.print("IP Address: ");
+    Serial.println(WiFi.localIP());
+  } else {
+    Serial.println("\nWiFi FAILED!");
+    lcd.print("WiFi FAILED!");
+  }
 }
 
 void loop() {
-  WiFiClient client = server.available();
-  if (client) {
-    client.setTimeout(1000);
+  unsigned long currentMillis = millis();
 
-    if (!client.connected()) {
-      client.stop();
-      return;
+  // Periodic sensor and display update (every 2 seconds)
+  if (currentMillis - lastSensorUpdate >= 2000) {
+    lastSensorUpdate = currentMillis;
+
+    float h = dht.readHumidity();
+    float t = dht.readTemperature();
+
+    // Line 1: Clear and show IP
+    lcd.setCursor(0, 0);
+    lcd.print(WiFi.localIP());
+    lcd.print("        "); // Clear leftover chars
+
+    // Line 2: Show Temp, Hum and Lamp
+    lcd.setCursor(0, 1);
+    if (isnan(h) || isnan(t)) {
+      lcd.print("Err ");
+    } else {
+      lcd.print((int)t); lcd.print("C ");
+      lcd.print((int)h); lcd.print("% ");
     }
 
-    String requestLine = client.readStringUntil('\n');
-    requestLine.trim();
-    if (requestLine.length() == 0) {
-      client.stop();
-      return;
-    }
-
-    // Проверка эндпоинта и метода
-    if (requestLine.indexOf("POST /api/lamp") >= 0) {
-      // Пропускаем заголовки до тела JSON
-      while (client.connected()) {
-        String line = client.readStringUntil('\n');
-        line.trim();
-        if (line.length() == 0) break;
-}
-
-bool readRequestBody(WiFiClient& client, size_t contentLength, String& body) {
-  body = "";
-  body.reserve(contentLength);
-
-  unsigned long start = millis();
-  while (client.connected() && body.length() < contentLength && (millis() - start) < 2000) {
-    while (client.available() && body.length() < contentLength) {
-      body += (char)client.read();
-      start = millis();
-    }
+    lcd.setCursor(10, 1);
+    lcd.print("L:");
+    lcd.print(lampStatus);
+    lcd.print("  ");
   }
 
-  return body.length() == contentLength;
-}
-
-void loop() {
   WiFiClient client = server.available();
   if (client) {
-    String requestLine = readHttpLine(client);
-
-    int contentLength = -1;
-    while (client.connected()) {
-      String line = readHttpLine(client);
-      if (line.length() == 0) break;
-
-      if (line.startsWith("Content-Length:")) {
-        String value = line.substring(String("Content-Length:").length());
-        value.trim();
-        contentLength = value.toInt();
-      }
+    String requestLine = "";
+    while (client.connected() && client.available()) {
+      char c = client.read();
+      if (c == '\n') break;
+      requestLine += c;
     }
 
-    // Проверка эндпоинта и метода
     if (requestLine.indexOf("POST /api/lamp") >= 0) {
-      if (contentLength <= 0) {
-        sendResponse(client, 400, "Bad Request");
-      } else {
-        String body;
-        if (!readRequestBody(client, (size_t)contentLength, body)) {
-          sendResponse(client, 400, "Bad Request");
-        } else {
-          StaticJsonDocument<128> doc;
-          DeserializationError error = deserializeJson(doc, body);
-
-          if (!error) {
-            const char* status = doc["status"];
-            if (status != NULL) {
-              if (strcmp(status, "on") == 0) digitalWrite(ledPin, HIGH);
-              else if (strcmp(status, "off") == 0) digitalWrite(ledPin, LOW);
-              sendResponse(client, 200, "OK");
-            } else {
-              sendResponse(client, 400, "Bad Request");
-            }
-          } else {
-            sendResponse(client, 400, "Bad Request");
-          }
-        }
+      // Clear headers until body
+      while (client.available()) {
+        char c = client.peek();
+        if (c == '{') break;
+        client.read();
       }
-    } else if (requestLine.indexOf("/api/lamp") >= 0) {
-      sendResponse(client, 405, "Method Not Allowed");
-    } else {
-      sendResponse(client, 404, "Not Found");
+
+      StaticJsonDocument<128> doc;
+      DeserializationError error = deserializeJson(doc, client);
+
+      if (!error) {
+        const char* status = doc["status"];
+        if (strcmp(status, "on") == 0) {
+          digitalWrite(ledPin, HIGH);
+          lampStatus = "ON ";
+        } else if (strcmp(status, "off") == 0) {
+          digitalWrite(ledPin, LOW);
+          lampStatus = "OFF";
+        }
+        sendResponse(client, 200, "OK");
+      } else {
+        sendResponse(client, 400, "Bad Request");
+      }
     }
     client.stop();
   }
