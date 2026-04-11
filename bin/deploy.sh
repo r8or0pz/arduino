@@ -3,7 +3,7 @@
 # Configuration
 FQBN="arduino:renesas_uno:unor4wifi"
 PORT="/dev/ttyACM0"
-SKETCH_PATH="/home/roman/repo/local/arduino/control-button/main/"
+SKETCH_PATH="$(pwd)"
 BAUDRATE="115200"
 
 echo "--- 1. Killing any processes using the serial port ---"
@@ -15,7 +15,7 @@ arduino-cli compile --fqbn $FQBN $SKETCH_PATH
 if [ $? -eq 0 ]; then
     echo "--- 3. Uploading to board ---"
     arduino-cli upload -p $PORT --fqbn $FQBN $SKETCH_PATH
-    
+
     if [ $? -eq 0 ]; then
         echo "--- 4. Success! Opening serial monitor (Ctrl+C to exit) ---"
         arduino-cli monitor -p $PORT --config baudrate=$BAUDRATE
