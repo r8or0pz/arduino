@@ -1,135 +1,67 @@
-# Arduino Wi-Fi Lamp Control
+# Arduino Weather Station
 
-This repository contains Arduino sketches for controlling a lamp over HTTP.
+This repository contains an Arduino weather-station sketch and shared local libraries.
 
 ## Project Layout
 
-- `thermo/thermo.ino` - Wi-Fi lamp API + DHT11 telemetry + LCD output.
-- `control-button/main/main.ino` - Wi-Fi lamp API sketch (currently in-progress).
+- `weather-station/weather-station.ino` - main sketch (rain sensor + LCD + touch backlight control)
+- `lib/Sensors/` - shared sensor abstractions (`AnalogSensor`, `DigitalSensor`, `TouchSensor`, `RainSensor`)
+- `lib/Logger/` - shared serial logger abstraction with log levels
+- `Makefile` - bootstrap, build, upload, monitor, and CI workflow
 
 ## Hardware
 
-### thermo sketch
+- Arduino UNO R4 WiFi (FQBN: `arduino:renesas_uno:unor4wifi`)
+- Rain sensor module
+  - digital output to `D2`
+  - analog output to `A0`
+- TTP223 capacitive touch sensor output to `D7`
+- I2C LCD (`0x27`, configured as `20x4`)
 
-- Arduino board with WiFiS3 support (for example UNO R4 WiFi)
-- DHT11 sensor
-- I2C LCD 16x2 (address `0x27`)
-- LED module or relay for lamp control
+## Behavior
 
-Pin usage in `thermo/thermo.ino`:
+- Reports rain status and intensity every 1 second.
+- Shows status on LCD:
+  - row 1: title
+  - row 2: raining/dry status
+  - row 3: raw intensity
+  - row 4: rain classification (`Heavy Rain`, `Light Rain`, `No Rain`)
+- Touching TTP223 toggles LCD backlight ON/OFF.
+- Writes structured logs to serial at `115200` baud.
 
-- `DHTPIN = 2`
-- `ledPin = 3`
+## Dependencies
 
-## Required Libraries
+Installed by `make deps` / `make bootstrap`:
 
-Install from Arduino Library Manager:
+- `LiquidCrystal I2C`
+- `DHT sensor library`
+- `Adafruit Unified Sensor`
 
-- ArduinoJson
-- LiquidCrystal I2C
-- DHT sensor library
+Board core:
 
-Built-in/board-provided:
+- `arduino:renesas_uno`
 
-- WiFiS3
-- Wire
-
-## Wi-Fi Credentials
-
-Create a file named `secrets.h` in each sketch folder that needs it (for example `thermo/secrets.h`):
-
-```cpp
-#pragma once
-
-#define SECRET_SSID "YOUR_WIFI_NAME"
-#define SECRET_PASS "YOUR_WIFI_PASSWORD"
-```
-
-## thermo API
-
-The sketch starts an HTTP server on port `80`.
-
-### Set lamp state
-
-`POST /api/lamp`
-
-Body:
-
-```json
-{"status":"on"}
-```
-
-or
-
-```json
-{"status":"off"}
-```
-
-Example:
+## Makefile Workflow
 
 ```bash
-curl -X POST "http://<DEVICE_IP>/api/lamp" \
-  -H "Content-Type: application/json" \
-  -d '{"status":"on"}'
-```
-
-Expected response:
-
-```json
-{"result":"OK"}
-```
-
-Possible error responses:
-
-- `400 Bad Request`
-- `400 Invalid Status`
-- `400 Malformed JSON`
-- `405 Method Not Allowed`
-- `404 Not Found`
-
-## Display Behavior (thermo)
-
-- LCD row 1: local IP address
-- LCD row 2: temperature, humidity, and lamp state (`L:ON` or `L:OFF`)
-- Sensor display refresh interval: 2 seconds
-
-## Upload Steps
-
-1. Open the sketch in Arduino IDE.
-2. Select your board and port.
-3. Install missing libraries if prompted.
-4. Add `secrets.h` with valid Wi-Fi credentials.
-5. Upload.
-6. Open Serial Monitor at `115200` baud to see startup logs and IP.
-
-## CLI Workflow (Fresh Machine / CI)
-
-Use the root `Makefile` for dependency setup, compile, and deploy.
-
-```bash
-# Install CLI (if missing), board core, and required libraries
+# Install Arduino CLI (if missing), board core, and libraries
 make bootstrap
 
-# Compile default sketch (weather-station)
-make build
-
-# Compile a specific sketch folder
+# Build sketch
 make build SKETCH=weather-station
 
-# Upload to board
-make deploy PORT=/dev/ttyACM0
+# Upload sketch
+make deploy SKETCH=weather-station PORT=/dev/ttyACM0
 
-# Upload and open serial monitor (old deploy.sh behavior)
-make deploy-live PORT=/dev/ttyACM0
+# Upload and open serial monitor
+make deploy-live SKETCH=weather-station PORT=/dev/ttyACM0
+
+# Monitor only
+make monitor PORT=/dev/ttyACM0 BAUD=115200
 ```
 
-CI-friendly (no hardware upload):
+For CI (no monitor/upload requirement):
 
 ```bash
 make ci SKETCH=weather-station
 ```
-
-## Notes
-
-- `thermo/thermo.ino` contains request timeout protection to avoid hanging on incomplete clients.
-- `control-button/main/main.ino` currently appears to be under active editing and may require cleanup before compiling.
