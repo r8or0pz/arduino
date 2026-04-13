@@ -3,21 +3,23 @@
 # Configuration
 FQBN="arduino:renesas_uno:unor4wifi"
 PORT="/dev/ttyACM0"
-SKETCH_PATH="$(pwd)"
 BAUDRATE="115200"
 
-echo "--- 1. Killing any processes using the serial port ---"
+# Use first argument as target directory, default to current dir if empty
+TARGET_DIR="${1:-.}"
+
+echo "--- 1. Killing any processes using $PORT ---"
 fuser -k $PORT 2>/dev/null
 
-echo "--- 2. Compiling the sketch ---"
-arduino-cli compile --fqbn $FQBN $SKETCH_PATH
+echo "--- 2. Compiling sketch in: $TARGET_DIR ---"
+arduino-cli compile --fqbn $FQBN "$TARGET_DIR"
 
 if [ $? -eq 0 ]; then
     echo "--- 3. Uploading to board ---"
-    arduino-cli upload -p $PORT --fqbn $FQBN $SKETCH_PATH
+    arduino-cli upload -p $PORT --fqbn $FQBN "$TARGET_DIR"
 
     if [ $? -eq 0 ]; then
-        echo "--- 4. Success! Opening serial monitor (Ctrl+C to exit) ---"
+        echo "--- 4. Success! Opening monitor ---"
         arduino-cli monitor -p $PORT --config baudrate=$BAUDRATE
     else
         echo "Upload failed!"

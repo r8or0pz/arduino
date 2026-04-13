@@ -1,39 +1,68 @@
-// Определяем пины
-const int rainDigitalPin = 2; // D0 датчика
-const int rainAnalogPin = A0; // A0 датчика
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+
+const int rainDigitalPin = 2;
+const int rainAnalogPin = A0;
+
+unsigned long lastReport = 0;
+const unsigned long reportInterval = 1000;
+
+// LCD configuration: address 0x27, 20 chars, 4 lines
+LiquidCrystal_I2C lcd(0x27, 20, 4);
 
 void setup() {
-  pinMode(rainDigitalPin, INPUT);
-  Serial.begin(9600);
-  Serial.println("Система мониторинга дождя запущена...");
+  pinMode(rainDigitalPin, INPUT_PULLUP);
+  Serial.begin(115200); // Matched to your deploy.sh
+
+  // Initialize LCD
+  lcd.init();
+  lcd.backlight();
+  lcd.setCursor(0, 0);
+  lcd.print("Weather Station");
+  lcd.setCursor(0, 1);
+  lcd.print("Initializing...");
+
+  Serial.println("--- Weather Station: Rain Sensor Active ---");
 }
 
 void loop() {
-  // 1. Читаем цифровое значение (0 или 1)
-  int isRainingDigital = digitalRead(rainDigitalPin);
+  // Non-blocking timer
+  if (millis() - lastReport >= reportInterval) {
+    lastReport = millis();
 
-  // 2. Читаем аналоговое значение (0 - 1023)
-  int rainIntensity = analogRead(rainAnalogPin);
+    int isRainingDigital = digitalRead(rainDigitalPin);
+    int rainIntensity = analogRead(rainAnalogPin);
 
-  // Вывод в монитор порта
-  Serial.print("Цифровой порог: ");
-  if (isRainingDigital == LOW) {
-    Serial.print("ОБНАРУЖЕН ");
-  } else {
-    Serial.print("НЕТ ");
+    // Serial Report
+    Serial.print("Digital: ");
+    Serial.print(isRainingDigital == LOW ? "ACTIVE" : "IDLE");
+    Serial.print(" | Raw Intensity: ");
+    Serial.println(rainIntensity);
+
+    // LCD Report
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("RAIN SENSOR");
+
+    lcd.setCursor(0, 1);
+    lcd.print("Status: ");
+    lcd.print(isRainingDigital == LOW ? "Raining" : "Dry");
+
+    lcd.setCursor(0, 2);
+    lcd.print("Intensity: ");
+    lcd.print(rainIntensity);
+
+    lcd.setCursor(0, 3);
+    // Classification
+    if (rainIntensity < 300) {
+      lcd.print("Heavy Rain");
+      Serial.println("Status: Heavy Rain");
+    } else if (rainIntensity < 700) {
+      lcd.print("Light Rain");
+      Serial.println("Status: Light Rain");
+    } else {
+      lcd.print("No Rain");
+      Serial.println("Status: Dry");
+    }
   }
-
-  Serial.print("| Аналоговое значение: ");
-  Serial.println(rainIntensity);
-
-  // Логика на основе аналоговых данных
-  if (rainIntensity < 300) {
-    Serial.println("Статус: Сильный ливень!");
-  } else if (rainIntensity < 700) {
-    Serial.println("Статус: Идет небольшой дождь.");
-  } else {
-    Serial.println("Статус: Сухо.");
-  }
-
-  delay(1000); // Задержка в 1 секунду
 }
