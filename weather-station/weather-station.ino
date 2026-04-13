@@ -1,18 +1,26 @@
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
+#include <Sensors.h>
+#include <Logger.h>
 
 const int rainDigitalPin = 2;
 const int rainAnalogPin = A0;
+const int touchPin = 7;
 
 unsigned long lastReport = 0;
 const unsigned long reportInterval = 1000;
 
+bool isDisplayOn = true;
+
 // LCD configuration: address 0x27, 20 chars, 4 lines
 LiquidCrystal_I2C lcd(0x27, 20, 4);
+RainSensor rainSensor("RainDigital", rainDigitalPin, "RainAnalog", rainAnalogPin);
+TouchSensor touchButton("DisplayTouch", touchPin, 120, false, false);
 
 void setup() {
-  pinMode(rainDigitalPin, INPUT_PULLUP);
-  Serial.begin(115200); // Matched to your deploy.sh
+  Logger::begin(115200);
+  rainSensor.begin();
+  touchButton.begin();
 
   // Initialize LCD
   lcd.init();
@@ -22,22 +30,33 @@ void setup() {
   lcd.setCursor(0, 1);
   lcd.print("Initializing...");
 
-  Serial.println("--- Weather Station: Rain Sensor Active ---");
+  Logger::info("weather-station", "Rain sensors initialized");
 }
 
 void loop() {
+  if (touchButton.wasPressed()) {
+    isDisplayOn = !isDisplayOn;
+    if (isDisplayOn) {
+      lcd.backlight();
+      Logger::info("weather-station", "Display: ON");
+    } else {
+      lcd.noBacklight();
+      Logger::info("weather-station", "Display: OFF");
+    }
+  }
+
   // Non-blocking timer
   if (millis() - lastReport >= reportInterval) {
     lastReport = millis();
 
-    int isRainingDigital = digitalRead(rainDigitalPin);
-    int rainIntensity = analogRead(rainAnalogPin);
+    RainReading rain = rainSensor.read();
 
     // Serial Report
-    Serial.print("Digital: ");
-    Serial.print(isRainingDigital == LOW ? "ACTIVE" : "IDLE");
-    Serial.print(" | Raw Intensity: ");
-    Serial.println(rainIntensity);
+    String logLine = "Digital: ";
+    logLine += (rain.isRaining ? "ACTIVE" : "IDLE");
+    logLine += " | Raw Intensity: ";
+    logLine += rain.intensity;
+    Logger::info("weather-station", logLine.c_str());
 
     // LCD Report
     lcd.clear();
@@ -46,23 +65,15 @@ void loop() {
 
     lcd.setCursor(0, 1);
     lcd.print("Status: ");
-    lcd.print(isRainingDigital == LOW ? "Raining" : "Dry");
+    lcd.print(rain.isRaining ? "Raining" : "Dry");
 
     lcd.setCursor(0, 2);
     lcd.print("Intensity: ");
-    lcd.print(rainIntensity);
+    lcd.print(rain.intensity);
 
     lcd.setCursor(0, 3);
-    // Classification
-    if (rainIntensity < 300) {
-      lcd.print("Heavy Rain");
-      Serial.println("Status: Heavy Rain");
-    } else if (rainIntensity < 700) {
-      lcd.print("Light Rain");
-      Serial.println("Status: Light Rain");
-    } else {
-      lcd.print("No Rain");
-      Serial.println("Status: Dry");
-    }
+    lcd.print(RainSensor::levelToText(rain.level));
+
+    Logger::log(rain.level == RAIN_HEAVY ? WARN : INFO, "weather-station", RainSensor::levelToStatusText(rain.level));
   }
 }

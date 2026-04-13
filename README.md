@@ -102,6 +102,33 @@ Possible error responses:
 5. Upload.
 6. Open Serial Monitor at `115200` baud to see startup logs and IP.
 
+## CLI Workflow (Fresh Machine / CI)
+
+Use the root `Makefile` for dependency setup, compile, and deploy.
+
+```bash
+# Install CLI (if missing), board core, and required libraries
+make bootstrap
+
+# Compile default sketch (weather-station)
+make build
+
+# Compile a specific sketch folder
+make build SKETCH=weather-station
+
+# Upload to board
+make deploy PORT=/dev/ttyACM0
+
+# Upload and open serial monitor (old deploy.sh behavior)
+make deploy-live PORT=/dev/ttyACM0
+```
+
+CI-friendly (no hardware upload):
+
+```bash
+make ci SKETCH=weather-station
+```
+
 ## Notes
 
 - `thermo/thermo.ino` contains request timeout protection to avoid hanging on incomplete clients.

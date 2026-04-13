@@ -3,7 +3,7 @@
     "configurations": [
         {
             "name": "Arduino",
-            "compilerPath": "/home/roman/.arduino15/packages/arduino/tools/arm-none-eabi-gcc/7-2017q4/bin/arm-none-eabi-g++",
+            "compilerPath": "${env:HOME}/.arduino15/packages/arduino/tools/arm-none-eabi-gcc/7-2017q4/bin/arm-none-eabi-g++",
             "compilerArgs": [
                 "-w",
                 "-fno-use-cxa-atexit",
@@ -12,22 +12,31 @@
             ],
             "intelliSenseMode": "gcc-x64",
             "includePath": [
-                "/home/roman/.arduino15/packages/arduino/hardware/renesas_uno/1.5.3/cores/arduino/tinyusb",
-                "/home/roman/.arduino15/packages/arduino/hardware/renesas_uno/1.5.3/cores/arduino/api/deprecated",
-                "/home/roman/.arduino15/packages/arduino/hardware/renesas_uno/1.5.3/cores/arduino/api/deprecated-avr-comp",
-                "/home/roman/.arduino15/packages/arduino/hardware/renesas_uno/1.5.3/cores/arduino",
-                "/home/roman/.arduino15/packages/arduino/hardware/renesas_uno/1.5.3/variants/UNOWIFIR4",
-                "/home/roman/.arduino15/packages/arduino/hardware/renesas_uno/1.5.3/libraries/Wire",
-                "/home/roman/Arduino/libraries/LiquidCrystal_I2C",
-                "/home/roman/.arduino15/packages/arduino/tools/arm-none-eabi-gcc/7-2017q4/arm-none-eabi/include/c++/7.2.1",
-                "/home/roman/.arduino15/packages/arduino/tools/arm-none-eabi-gcc/7-2017q4/arm-none-eabi/include/c++/7.2.1/arm-none-eabi",
-                "/home/roman/.arduino15/packages/arduino/tools/arm-none-eabi-gcc/7-2017q4/arm-none-eabi/include/c++/7.2.1/backward",
-                "/home/roman/.arduino15/packages/arduino/tools/arm-none-eabi-gcc/7-2017q4/lib/gcc/arm-none-eabi/7.2.1/include",
-                "/home/roman/.arduino15/packages/arduino/tools/arm-none-eabi-gcc/7-2017q4/lib/gcc/arm-none-eabi/7.2.1/include-fixed",
-                "/home/roman/.arduino15/packages/arduino/tools/arm-none-eabi-gcc/7-2017q4/arm-none-eabi/include"
+                "${env:HOME}/.arduino15/packages/arduino/hardware/renesas_uno/1.5.3/cores/arduino/tinyusb",
+                "${env:HOME}/.arduino15/packages/arduino/hardware/renesas_uno/1.5.3/cores/arduino/api/deprecated",
+                "${env:HOME}/.arduino15/packages/arduino/hardware/renesas_uno/1.5.3/cores/arduino/api/deprecated-avr-comp",
+                "${env:HOME}/.arduino15/packages/arduino/hardware/renesas_uno/1.5.3/cores/arduino",
+                "${env:HOME}/.arduino15/packages/arduino/hardware/renesas_uno/1.5.3/variants/UNOWIFIR4",
+                "${env:HOME}/.arduino15/packages/arduino/hardware/renesas_uno/1.5.3/variants/UNOWIFIR4/includes",
+                "${env:HOME}/.arduino15/packages/arduino/hardware/renesas_uno/1.5.3/variants/UNOWIFIR4/includes/**",
+                "${env:HOME}/.arduino15/packages/arduino/hardware/renesas_uno/1.5.3/variants/UNOWIFIR4/includes/ra/fsp/inc",
+                "${env:HOME}/.arduino15/packages/arduino/hardware/renesas_uno/1.5.3/variants/UNOWIFIR4/includes/ra/fsp/inc/api",
+                "${env:HOME}/.arduino15/packages/arduino/hardware/renesas_uno/1.5.3/libraries/Wire",
+                "${env:HOME}/Arduino/libraries/LiquidCrystal_I2C",
+                "${env:HOME}/Arduino/libraries/DHT_sensor_library",
+                "${workspaceFolder}/lib",
+                "${workspaceFolder}/lib/Logger",
+                "${workspaceFolder}/lib/Sensors",
+                "${workspaceFolder}/lib/**",
+                "${env:HOME}/.arduino15/packages/arduino/tools/arm-none-eabi-gcc/7-2017q4/arm-none-eabi/include/c++/7.2.1",
+                "${env:HOME}/.arduino15/packages/arduino/tools/arm-none-eabi-gcc/7-2017q4/arm-none-eabi/include/c++/7.2.1/arm-none-eabi",
+                "${env:HOME}/.arduino15/packages/arduino/tools/arm-none-eabi-gcc/7-2017q4/arm-none-eabi/include/c++/7.2.1/backward",
+                "${env:HOME}/.arduino15/packages/arduino/tools/arm-none-eabi-gcc/7-2017q4/lib/gcc/arm-none-eabi/7.2.1/include",
+                "${env:HOME}/.arduino15/packages/arduino/tools/arm-none-eabi-gcc/7-2017q4/lib/gcc/arm-none-eabi/7.2.1/include-fixed",
+                "${env:HOME}/.arduino15/packages/arduino/tools/arm-none-eabi-gcc/7-2017q4/arm-none-eabi/include"
             ],
             "forcedInclude": [
-                "/home/roman/.arduino15/packages/arduino/hardware/renesas_uno/1.5.3/cores/arduino/Arduino.h"
+                "${env:HOME}/.arduino15/packages/arduino/hardware/renesas_uno/1.5.3/cores/arduino/Arduino.h"
             ],
             "cStandard": "c11",
             "cppStandard": "c++17",
@@ -37,7 +46,7 @@
                 "BACKTRACE_SUPPORT",
                 "ARDUINO_UNOR4_WIFI",
                 "ARDUINO=10607",
-                "PROJECT_NAME=\"/home/roman/.cache/arduino/sketches/B73FCC83C552D3B8B04DF7EAC82EDAC4/weather-station.ino\"",
+                "PROJECT_NAME=\"${env:HOME}/.cache/arduino/sketches/B73FCC83C552D3B8B04DF7EAC82EDAC4/weather-station.ino\"",
                 "ARDUINO_UNOWIFIR4",
                 "ARDUINO_ARCH_RENESAS_UNO",
                 "ARDUINO_ARCH_RENESAS",
