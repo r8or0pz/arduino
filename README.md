@@ -65,3 +65,15 @@ For CI (no monitor/upload requirement):
 ```bash
 make ci SKETCH=weather-station
 ```
+
+## ThingSpeak MATLAB Analysis
+
+Use [weather-station/thingspeak_rain_analysis.m](weather-station/thingspeak_rain_analysis.m) inside ThingSpeak MATLAB Analysis.
+
+Important ThingSpeak limitation:
+
+- Do not write full historical matrices back with `thingSpeakWrite`.
+- Write one aggregated row per run (for example mean/max/ratio).
+- Free tier channels typically require at least 15 seconds between updates.
+
+If you see `Requests are too frequent`, reduce execution frequency and make sure your script performs a single write per run.
