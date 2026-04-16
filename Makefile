@@ -41,6 +41,7 @@ deps:
 	@$(ARDUINO_CLI) lib install "LiquidCrystal I2C"
 	@$(ARDUINO_CLI) lib install "DHT sensor library"
 	@$(ARDUINO_CLI) lib install "Adafruit Unified Sensor"
+	@$(ARDUINO_CLI) lib install "ThingSpeak"
 
 bootstrap: ensure-cli core-install deps
 
