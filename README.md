@@ -6,6 +6,7 @@ This repository contains an Arduino weather-station sketch and shared local libr
 
 - `weather-station/weather-station.ino` - main sketch (rain sensor + LCD + touch backlight control)
 - `lib/Sensors/` - shared sensor abstractions (`AnalogSensor`, `DigitalSensor`, `TouchSensor`, `RainSensor`)
+- `lib/Connectivity/` - WiFi connection handling shared by backends
 - `lib/Logger/` - shared serial logger abstraction with log levels
 - `Makefile` - bootstrap, build, upload, monitor, and CI workflow
 
@@ -16,26 +17,31 @@ This repository contains an Arduino weather-station sketch and shared local libr
   - digital output to `D2`
   - analog output to `A0`
 - TTP223 capacitive touch sensor output to `D7`
+- SHT3X temperature/humidity sensor on I2C (`0x44` default address)
+- BMP580 pressure sensor on I2C (`0x46` default address)
+- Station elevation: `129 m` above sea level (used to adjust pressure to sea-level equivalent)
 - I2C LCD (`0x27`, configured as `20x4`)
 
 ## Behavior
 
-- Reports rain status and intensity every 1 second.
+- Reports rain status and intensity every 2 seconds.
 - Shows status on LCD:
-  - row 1: title
+  - row 1: rain raw value and sea-level pressure (`P0`) in `mmHg`
   - row 2: raining/dry status
-  - row 3: raw intensity
+  - row 3: temperature and humidity from SHT3X
   - row 4: rain classification (`Heavy Rain`, `Light Rain`, `No Rain`)
 - Touching TTP223 toggles LCD backlight ON/OFF.
 - Writes structured logs to serial at `115200` baud.
+- Publishes temperature, humidity, rain intensity, and sea-level-adjusted pressure in `mmHg` to ThingSpeak when a backend is configured.
 
 ## Dependencies
 
 Installed by `make deps` / `make bootstrap`:
 
 - `LiquidCrystal I2C`
-- `DHT sensor library`
 - `Adafruit Unified Sensor`
+- `Adafruit BMP5xx Library`
+- `ThingSpeak`
 
 Board core:
 

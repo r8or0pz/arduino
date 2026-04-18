@@ -2,7 +2,8 @@
 #define SENSORS_H
 
 #include <Arduino.h>
-#include "DHT.h"
+#include <Wire.h>
+#include <Adafruit_BMP5xx.h>
 
 struct SensorReading {
     float value;
@@ -101,22 +102,36 @@ private:
     int _lightThreshold;
 };
 
-enum DhtMetric {
-    DHT_TEMPERATURE_C,
-    DHT_HUMIDITY
+enum Sht3xMetric {
+    SHT3X_TEMPERATURE_C,
+    SHT3X_HUMIDITY
 };
 
-class DhtSensor : public ISensor {
+class Sht3xSensor : public ISensor {
 public:
-    DhtSensor(const char* sensorName, uint8_t pin, uint8_t dhtType, DhtMetric metric);
+    Sht3xSensor(const char* sensorName, uint8_t address, Sht3xMetric metric);
     bool begin() override;
     SensorReading read() override;
     const char* name() const override;
 
 private:
     const char* _sensorName;
-    DHT _dht;
-    DhtMetric _metric;
+    uint8_t _address;
+    Sht3xMetric _metric;
+};
+
+class Bmp580PressureSensor : public ISensor {
+public:
+    Bmp580PressureSensor(const char* sensorName, uint8_t address = BMP5XX_DEFAULT_ADDRESS);
+    bool begin() override;
+    SensorReading read() override;
+    const char* name() const override;
+
+private:
+    const char* _sensorName;
+    uint8_t _address;
+    Adafruit_BMP5xx _bmp;
+    bool _initialized;
 };
 
 #endif

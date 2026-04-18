@@ -27,12 +27,20 @@ end
 allowSameChannelWrite = false;
 
 % Source channel field mapping (from weather-station channel):
-% field1: temperature
-% field2: humidity
-% field3: rain_intensity
+% field1: temperature from SHT3X (deg C)
+% field2: humidity from SHT3X (% RH)
+% field3: rain_intensity_raw from analog rain sensor (typically 0..1023)
+% field4: sea-level-adjusted pressure from BMP580 (mmHg)
 temperatureField = 1;
 humidityField = 2;
 rainIntensityField = 3;
+pressureField = 4;
+
+% Raw rain sensor normalization.
+% The firmware publishes the analog rain reading directly to ThingSpeak.
+% For common modules, lower values mean wetter conditions.
+rainIntensityDryValue = 1023;
+rainIntensityWetValue = 0;
 
 % Number of most recent points to analyze
 numPoints = 120;
@@ -45,12 +53,12 @@ minValidPoints = 6;
 if isempty(readAPIKey)
     % Use this only for public channels.
     dataTable = thingSpeakRead(readChannelID, ...
-        'Fields', [temperatureField, humidityField, rainIntensityField], ...
+        'Fields', [temperatureField, humidityField, rainIntensityField, pressureField], ...
         'NumPoints', numPoints, ...
         'OutputFormat', 'table');
 else
     dataTable = thingSpeakRead(readChannelID, ...
-        'Fields', [temperatureField, humidityField, rainIntensityField], ...
+        'Fields', [temperatureField, humidityField, rainIntensityField, pressureField], ...
         'NumPoints', numPoints, ...
         'OutputFormat', 'table', ...
         'ReadKey', readAPIKey);
@@ -68,11 +76,16 @@ rainVarCandidates = { ...
     sprintf('Field%d', rainIntensityField), ...
     sprintf('field%d', rainIntensityField), ...
     'rain_intensity'};
+pressureVarCandidates = { ...
+    sprintf('Field%d', pressureField), ...
+    sprintf('field%d', pressureField), ...
+    'pressure'};
 
 tableVars = dataTable.Properties.VariableNames;
 tempVar = '';
 humVar = '';
 rainVar = '';
+pressureVar = '';
 
 for i = 1:numel(temperatureVarCandidates)
     if any(strcmpi(tableVars, temperatureVarCandidates{i}))
@@ -92,21 +105,32 @@ for i = 1:numel(rainVarCandidates)
         break;
     end
 end
+for i = 1:numel(pressureVarCandidates)
+    if any(strcmpi(tableVars, pressureVarCandidates{i}))
+        pressureVar = tableVars{find(strcmpi(tableVars, pressureVarCandidates{i}), 1)};
+        break;
+    end
+end
 
 if ~isempty(tempVar) && ~isempty(humVar) && ~isempty(rainVar)
     temperature = str2double(string(dataTable.(tempVar)));
     humidity = str2double(string(dataTable.(humVar)));
     rainIntensity = str2double(string(dataTable.(rainVar)));
+    if ~isempty(pressureVar)
+        pressure = str2double(string(dataTable.(pressureVar)));
+    else
+        pressure = nan(size(rainIntensity));
+    end
 else
     % Fallback path: re-read as numeric matrix and trust field order requested.
     fprintf('Falling back to matrix parse due to unexpected table column names.\n');
     if isempty(readAPIKey)
         matrixData = thingSpeakRead(readChannelID, ...
-            'Fields', [temperatureField, humidityField, rainIntensityField], ...
+            'Fields', [temperatureField, humidityField, rainIntensityField, pressureField], ...
             'NumPoints', numPoints);
     else
         matrixData = thingSpeakRead(readChannelID, ...
-            'Fields', [temperatureField, humidityField, rainIntensityField], ...
+            'Fields', [temperatureField, humidityField, rainIntensityField, pressureField], ...
             'NumPoints', numPoints, ...
             'ReadKey', readAPIKey);
     end
@@ -119,12 +143,26 @@ else
     temperature = matrixData(:, 1);
     humidity = matrixData(:, 2);
     rainIntensity = matrixData(:, 3);
+    if size(matrixData, 2) >= 4
+        pressure = matrixData(:, 4);
+    else
+        pressure = nan(size(rainIntensity));
+    end
 end
 
 validMask = ~isnan(temperature) & ~isnan(humidity) & ~isnan(rainIntensity);
 temperature = temperature(validMask);
 humidity = humidity(validMask);
 rainIntensity = rainIntensity(validMask);
+pressure = pressure(validMask);
+
+if rainIntensityDryValue == rainIntensityWetValue
+    error('rainIntensityDryValue and rainIntensityWetValue must be different.');
+end
+
+rainScaleDenominator = rainIntensityDryValue - rainIntensityWetValue;
+rainWetness = (rainIntensityDryValue - rainIntensity) ./ rainScaleDenominator;
+rainWetness = min(max(rainWetness, 0), 1);
 
 if isempty(rainIntensity)
     error('No valid ThingSpeak data found. Check channel, fields, and keys.');
@@ -141,8 +179,8 @@ end
 % ----------------------
 % Basic trend slope using sample index as time proxy.
 idx = (1:numel(rainIntensity))';
-if numel(rainIntensity) > 1
-    pRain = polyfit(idx, rainIntensity, 1);
+if numel(rainWetness) > 1
+    pRain = polyfit(idx, rainWetness, 1);
     rainTrendPerSample = pRain(1);
     pTemp = polyfit(idx, temperature, 1);
     pHum = polyfit(idx, humidity, 1);
@@ -154,22 +192,23 @@ end
 
 latestTemp = temperature(end);
 latestHum = humidity(end);
-latestRain = rainIntensity(end);
+latestRainRaw = rainIntensity(end);
+latestRainWetness = rainWetness(end);
 
 % Near-term heuristic nowcast score (0..100).
 rainChance1h = 100 * ( ...
-    0.55 * min(max(latestRain, 0), 1) + ...
+    0.55 * latestRainWetness + ...
     0.30 * min(max(latestHum / 100, 0), 1) + ...
     0.15 * min(max((rainTrendPerSample + 0.2) / 0.4, 0), 1));
 
-% Expected rain intensity in the next horizon.
-expectedRainIntensity1h = min(max(latestRain + rainTrendPerSample * 10, 0), 1);
+% Expected normalized wetness in the next horizon.
+expectedRainWetness1h = min(max(latestRainWetness + rainTrendPerSample * 10, 0), 1);
 
 % A simple categorical forecast code:
 % 0 = clear/dry, 1 = humid/cloudy, 2 = light rain likely, 3 = heavy rain likely
-if rainChance1h >= 75 || expectedRainIntensity1h >= 0.8
+if rainChance1h >= 75 || expectedRainWetness1h >= 0.8
     forecastCode = 3;
-elseif rainChance1h >= 50 || expectedRainIntensity1h >= 0.5
+elseif rainChance1h >= 50 || expectedRainWetness1h >= 0.5
     forecastCode = 2;
 elseif latestHum >= 70
     forecastCode = 1;
@@ -179,7 +218,7 @@ end
 
 % Confidence rises with more samples and smoother rain signal.
 sampleConfidence = min(numel(rainIntensity) / 60, 1);
-smoothnessPenalty = min(std(rainIntensity) / 0.4, 1);
+smoothnessPenalty = min(std(rainWetness) / 0.4, 1);
 confidencePercent = 100 * max(0.2, 0.7 * sampleConfidence + 0.3 * (1 - smoothnessPenalty));
 
 % 1-hour rough trend projections for display/logging only.
@@ -188,8 +227,13 @@ humidityForecast1h = pHum(1) * (numel(humidity) + 10) + pHum(2);
 humidityForecast1h = min(max(humidityForecast1h, 0), 100);
 
 fprintf('Samples analyzed: %d\n', numel(rainIntensity));
+if ~isempty(pressure) && ~isnan(pressure(end))
+    fprintf('Latest source values: T=%.2fC H=%.2f%% P=%.2fmmHg RainRaw=%.0f Wetness=%.2f\n', latestTemp, latestHum, pressure(end), latestRainRaw, latestRainWetness);
+else
+    fprintf('Latest source values: T=%.2fC H=%.2f%% RainRaw=%.0f Wetness=%.2f\n', latestTemp, latestHum, latestRainRaw, latestRainWetness);
+end
 fprintf('Nowcast rain chance 1h: %.1f%%\n', rainChance1h);
-fprintf('Expected rain intensity 1h: %.2f\n', expectedRainIntensity1h);
+fprintf('Expected rain wetness 1h: %.2f\n', expectedRainWetness1h);
 fprintf('Forecast code: %d\n', forecastCode);
 fprintf('Confidence: %.1f%%\n', confidencePercent);
 fprintf('Temp forecast 1h: %.2f\n', tempForecast1h);
@@ -201,7 +245,7 @@ fprintf('Humidity forecast 1h: %.2f\n', humidityForecast1h);
 % Writes exactly one update per run to avoid request bursts.
 % Destination field mapping (recommended):
 % field1 = rain_chance_1h_percent
-% field2 = expected_rain_intensity_1h
+% field2 = expected_rain_wetness_1h
 % field3 = forecast_code
 % field4 = confidence_percent
 if readChannelID == writeChannelID && ~allowSameChannelWrite
@@ -213,7 +257,7 @@ else
             error('writeAPIKey is empty. Set destination channel Write API key.');
         end
 
-        thingSpeakWrite(writeChannelID, [rainChance1h, expectedRainIntensity1h, forecastCode, confidencePercent], ...
+        thingSpeakWrite(writeChannelID, [rainChance1h, expectedRainWetness1h, forecastCode, confidencePercent], ...
             'Fields', [1, 2, 3, 4], ...
             'WriteKey', writeAPIKey);
     catch ME

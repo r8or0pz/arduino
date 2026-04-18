@@ -7,6 +7,8 @@ CORE ?= arduino:renesas_uno
 PORT ?= /dev/ttyACM0
 BAUD ?= 115200
 SKETCH ?= weather-station
+SKETCHBOOK_ROOT ?= $(shell if [ -n "$$ARDUINO_SKETCHBOOK_PATH" ]; then printf '%s' "$$ARDUINO_SKETCHBOOK_PATH"; elif [ -f "$$HOME/.arduino15/preferences.txt" ]; then sed -n 's/^sketchbook\.path=//p' "$$HOME/.arduino15/preferences.txt" | tail -n 1; else printf '%s' "$$HOME/Arduino"; fi)
+SKETCHBOOK_LIBS ?= $(if $(strip $(SKETCHBOOK_ROOT)),$(SKETCHBOOK_ROOT)/libraries,$(HOME)/Arduino/libraries)
 
 .PHONY: help ensure-cli cli-install core-install deps bootstrap kill-port build upload deploy deploy-live monitor ci clean
 
@@ -39,8 +41,8 @@ deps:
 	@$(MAKE) ensure-cli
 	@$(ARDUINO_CLI) lib update-index
 	@$(ARDUINO_CLI) lib install "LiquidCrystal I2C"
-	@$(ARDUINO_CLI) lib install "DHT sensor library"
 	@$(ARDUINO_CLI) lib install "Adafruit Unified Sensor"
+	@$(ARDUINO_CLI) lib install "Adafruit BMP5xx Library"
 	@$(ARDUINO_CLI) lib install "ThingSpeak"
 
 bootstrap: ensure-cli core-install deps
@@ -50,7 +52,7 @@ kill-port:
 
 build:
 	@$(MAKE) ensure-cli
-	@$(ARDUINO_CLI) compile --fqbn $(FQBN) --libraries lib $(SKETCH)
+	@$(ARDUINO_CLI) compile --fqbn $(FQBN) --libraries lib --libraries $(SKETCHBOOK_LIBS) $(SKETCH)
 
 upload: kill-port
 	@$(MAKE) ensure-cli

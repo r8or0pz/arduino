@@ -4,6 +4,7 @@
 struct WeatherData {
     float temperature;
     float humidity;
+    float pressure;
     int rainIntensity;
     bool isRaining;
 };

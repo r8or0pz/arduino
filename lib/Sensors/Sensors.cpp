@@ -1,5 +1,56 @@
 #include "Sensors.h"
 
+namespace {
+
+bool isSht3xCrcValid(const uint8_t* data, size_t len, uint8_t expectedCrc) {
+    uint8_t crc = 0xFF;
+    for (size_t index = 0; index < len; ++index) {
+        crc ^= data[index];
+        for (uint8_t bit = 0; bit < 8; ++bit) {
+            if (crc & 0x80) {
+                crc = static_cast<uint8_t>((crc << 1) ^ 0x31);
+            } else {
+                crc <<= 1;
+            }
+        }
+    }
+
+    return crc == expectedCrc;
+}
+
+bool readSht3xMeasurement(uint8_t address, float& temperature, float& humidity) {
+    Wire.beginTransmission(address);
+    Wire.write(0x24);
+    Wire.write(0x00);
+    if (Wire.endTransmission() != 0) {
+        return false;
+    }
+
+    delay(20);
+
+    if (Wire.requestFrom(static_cast<int>(address), 6) != 6) {
+        return false;
+    }
+
+    uint8_t buffer[6];
+    for (uint8_t index = 0; index < 6; ++index) {
+        buffer[index] = static_cast<uint8_t>(Wire.read());
+    }
+
+    if (!isSht3xCrcValid(buffer, 2, buffer[2]) || !isSht3xCrcValid(buffer + 3, 2, buffer[5])) {
+        return false;
+    }
+
+    uint16_t rawTemperature = static_cast<uint16_t>((buffer[0] << 8) | buffer[1]);
+    uint16_t rawHumidity = static_cast<uint16_t>((buffer[3] << 8) | buffer[4]);
+
+    temperature = -45.0f + (175.0f * rawTemperature / 65535.0f);
+    humidity = 100.0f * rawHumidity / 65535.0f;
+    return true;
+}
+
+}
+
 AnalogSensor::AnalogSensor(const char* sensorName, uint8_t pin, const char* unit)
     : _sensorName(sensorName), _pin(pin), _unit(unit) {}
 
@@ -136,34 +187,102 @@ const char* RainSensor::levelToStatusText(RainLevel level) {
     }
 }
 
-DhtSensor::DhtSensor(const char* sensorName, uint8_t pin, uint8_t dhtType, DhtMetric metric)
-    : _sensorName(sensorName), _dht(pin, dhtType), _metric(metric) {}
+Sht3xSensor::Sht3xSensor(const char* sensorName, uint8_t address, Sht3xMetric metric)
+    : _sensorName(sensorName), _address(address), _metric(metric) {}
 
-bool DhtSensor::begin() {
-    _dht.begin();
+bool Sht3xSensor::begin() {
+    Wire.begin();
     return true;
 }
 
-SensorReading DhtSensor::read() {
+SensorReading Sht3xSensor::read() {
     float value = NAN;
     const char* unit = "";
+    float temperature = NAN;
+    float humidity = NAN;
 
-    if (_metric == DHT_TEMPERATURE_C) {
-        value = _dht.readTemperature();
+    bool measurementValid = readSht3xMeasurement(_address, temperature, humidity);
+
+    if (measurementValid && _metric == SHT3X_TEMPERATURE_C) {
+        value = temperature;
         unit = "C";
-    } else {
-        value = _dht.readHumidity();
+    } else if (measurementValid) {
+        value = humidity;
         unit = "%";
     }
 
     SensorReading reading;
     reading.value = value;
-    reading.valid = !isnan(value);
+    reading.valid = measurementValid && !isnan(value);
     reading.timestampMs = millis();
     reading.unit = unit;
     return reading;
 }
 
-const char* DhtSensor::name() const {
+const char* Sht3xSensor::name() const {
+    return _sensorName;
+}
+
+Bmp580PressureSensor::Bmp580PressureSensor(const char* sensorName, uint8_t address)
+    : _sensorName(sensorName), _address(address), _initialized(false) {}
+
+bool Bmp580PressureSensor::begin() {
+    Wire.begin();
+
+    uint8_t addressesToTry[2] = {_address, _address};
+    size_t addressCount = 1;
+
+    if (_address == BMP5XX_DEFAULT_ADDRESS) {
+        addressesToTry[1] = BMP5XX_ALTERNATIVE_ADDRESS;
+        addressCount = 2;
+    } else if (_address == BMP5XX_ALTERNATIVE_ADDRESS) {
+        addressesToTry[1] = BMP5XX_DEFAULT_ADDRESS;
+        addressCount = 2;
+    }
+
+    bool started = false;
+    for (size_t index = 0; index < addressCount; ++index) {
+        if (_bmp.begin(addressesToTry[index], &Wire)) {
+            _address = addressesToTry[index];
+            started = true;
+            break;
+        }
+    }
+
+    if (!started) {
+        _initialized = false;
+        return false;
+    }
+
+    _initialized = true;
+    return true;
+}
+
+SensorReading Bmp580PressureSensor::read() {
+    SensorReading reading;
+    reading.value = NAN;
+    reading.valid = false;
+    reading.timestampMs = millis();
+    reading.unit = "hPa";
+
+    if (!_initialized && !begin()) {
+        return reading;
+    }
+
+    unsigned long startedAt = millis();
+    while (!_bmp.dataReady() && (millis() - startedAt) < 250) {
+        delay(10);
+    }
+
+    if (!_bmp.performReading()) {
+        return reading;
+    }
+
+    reading.value = _bmp.pressure;
+    reading.valid = !isnan(reading.value);
+    return reading;
+}
+
+const char* Bmp580PressureSensor::name() const {
     return _sensorName;
 }

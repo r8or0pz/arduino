@@ -1,11 +1,9 @@
 #include "Logger.h"
 
 void Logger::begin(unsigned long baudRate) {
-    if (!Serial) {
-        Serial.begin(baudRate);
-        unsigned long started = millis();
-        while (!Serial && (millis() - started < 1500)) {
-        }
+    Serial.begin(baudRate);
+    unsigned long started = millis();
+    while (!Serial && (millis() - started < 1500)) {
     }
 }
 
