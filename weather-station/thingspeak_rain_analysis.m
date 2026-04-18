@@ -195,6 +195,16 @@ latestHum = humidity(end);
 latestRainRaw = rainIntensity(end);
 latestRainWetness = rainWetness(end);
 
+% Dew point in deg C using Magnus approximation.
+if latestHum > 0
+    dewPointA = 17.62;
+    dewPointB = 243.12;
+    dewPointGamma = log(latestHum / 100) + (dewPointA * latestTemp) / (dewPointB + latestTemp);
+    dewPointNow = (dewPointB * dewPointGamma) / (dewPointA - dewPointGamma);
+else
+    dewPointNow = nan;
+end
+
 % Near-term heuristic nowcast score (0..100).
 rainChance1h = 100 * ( ...
     0.55 * latestRainWetness + ...
@@ -203,6 +213,15 @@ rainChance1h = 100 * ( ...
 
 % Expected normalized wetness in the next horizon.
 expectedRainWetness1h = min(max(latestRainWetness + rainTrendPerSample * 10, 0), 1);
+
+% Express projected rain intensity as a percent-style wetness score.
+expectedRainIntensity1h = 100 * expectedRainWetness1h;
+
+% Trend in projected wetness percentage points over the next horizon.
+rainTrendPercent = 100 * (expectedRainWetness1h - latestRainWetness);
+if abs(rainTrendPercent) < 0.05
+    rainTrendPercent = 0;
+end
 
 % A simple categorical forecast code:
 % 0 = clear/dry, 1 = humid/cloudy, 2 = light rain likely, 3 = heavy rain likely
@@ -233,11 +252,13 @@ else
     fprintf('Latest source values: T=%.2fC H=%.2f%% RainRaw=%.0f Wetness=%.2f\n', latestTemp, latestHum, latestRainRaw, latestRainWetness);
 end
 fprintf('Nowcast rain chance 1h: %.1f%%\n', rainChance1h);
-fprintf('Expected rain wetness 1h: %.2f\n', expectedRainWetness1h);
+fprintf('Expected rain intensity 1h: %.1f%%\n', expectedRainIntensity1h);
 fprintf('Forecast code: %d\n', forecastCode);
 fprintf('Confidence: %.1f%%\n', confidencePercent);
 fprintf('Temp forecast 1h: %.2f\n', tempForecast1h);
 fprintf('Humidity forecast 1h: %.2f\n', humidityForecast1h);
+fprintf('Dew point now: %.2fC\n', dewPointNow);
+fprintf('Rain trend percent: %.1f%%\n', rainTrendPercent);
 
 % ----------------------
 % Write derived metrics
@@ -245,9 +266,13 @@ fprintf('Humidity forecast 1h: %.2f\n', humidityForecast1h);
 % Writes exactly one update per run to avoid request bursts.
 % Destination field mapping (recommended):
 % field1 = rain_chance_1h_percent
-% field2 = expected_rain_wetness_1h
-% field3 = forecast_code
-% field4 = confidence_percent
+% field2 = expected_rain_intensity_1h (percent-style 0..100)
+% field3 = temp_forecast_1h
+% field4 = humidity_forecast_1h
+% field5 = dew_point_now
+% field6 = rain_trend_percent
+% field7 = forecast_code
+% field8 = confidence_percent
 if readChannelID == writeChannelID && ~allowSameChannelWrite
     fprintf(['Write skipped: readChannelID and writeChannelID are the same. ' ...
         'Use a separate destination channel or set allowSameChannelWrite=true.\n']);
@@ -257,8 +282,8 @@ else
             error('writeAPIKey is empty. Set destination channel Write API key.');
         end
 
-        thingSpeakWrite(writeChannelID, [rainChance1h, expectedRainWetness1h, forecastCode, confidencePercent], ...
-            'Fields', [1, 2, 3, 4], ...
+        thingSpeakWrite(writeChannelID, [rainChance1h, expectedRainIntensity1h, tempForecast1h, humidityForecast1h, dewPointNow, rainTrendPercent, forecastCode, confidencePercent], ...
+            'Fields', [1, 2, 3, 4, 5, 6, 7, 8], ...
             'WriteKey', writeAPIKey);
     catch ME
         if contains(lower(ME.message), 'too frequent')

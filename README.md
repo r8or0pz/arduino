@@ -76,6 +76,24 @@ make ci SKETCH=weather-station
 
 Use [weather-station/thingspeak_rain_analysis.m](weather-station/thingspeak_rain_analysis.m) inside ThingSpeak MATLAB Analysis.
 
+Source weather-station channel fields:
+
+- field1: temperature from SHT3X in `deg C`
+- field2: humidity from SHT3X in `% RH`
+- field3: raw rain sensor intensity in `0..1023`
+- field4: sea-level-adjusted pressure in `mmHg`
+
+Destination weather-station-forecast channel fields:
+
+- field1: `rain_chance_1h_percent`
+- field2: `expected_rain_intensity_1h` as percent-style wetness in `0..100`
+- field3: `temp_forecast_1h` in `deg C`
+- field4: `humidity_forecast_1h` in `% RH`
+- field5: `dew_point_now` in `deg C`
+- field6: `rain_trend_percent`
+- field7: `forecast_code` (`0=clear/dry`, `1=humid/cloudy`, `2=light rain likely`, `3=heavy rain likely`)
+- field8: `confidence_percent`
+
 Important ThingSpeak limitation:
 
 - Do not write full historical matrices back with `thingSpeakWrite`.
