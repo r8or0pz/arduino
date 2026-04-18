@@ -227,8 +227,8 @@ void WeatherStationApp::renderRainOnLcd(const RainReading& rain, float pressure)
     _lcd.print("Rain: ");
     _lcd.print(rain.intensity);
     if (!isnan(pressure)) {
-        _lcd.print(" P0:");
-        _lcd.print(pressure, 0);
+        _lcd.print(" P:");
+        _lcd.print(pressure, 3);
     }
     _lcd.print("      "); // Clear remaining
 
