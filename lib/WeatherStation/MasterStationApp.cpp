@@ -528,16 +528,6 @@ void MasterStationApp::setDisplayPowerState(bool enabled, bool showToast) {
         _display.setDrawColor(1);
         _display.setFontMode(0);
 
-        if (showToast) {
-            _display.clearBuffer();
-            _display.setDrawColor(1);
-            _display.setFont(u8g2_font_9x15B_tr);
-            _display.drawStr(28, 30, "DISPLAY");
-            _display.drawStr(42, 50, "ON");
-            _display.sendBuffer();
-            delay(300);
-        }
-
         _lastReport = 0; // Force immediate redraw on next tick.
         _lastDisplayActivityAt = millis();
         Logger::info("master-station", "Display toggled ON");
