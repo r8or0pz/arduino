@@ -1,2 +1,3 @@
-secrets.h
-weather-station-master/secrets.h
+**/secrets.h
+/lib/Config/RadioSecrets.h
+

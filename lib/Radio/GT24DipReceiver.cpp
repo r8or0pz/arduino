@@ -1,4 +1,6 @@
 #include "GT24DipReceiver.h"
+#include "RadioEncryption.h"
+#include <WeatherStationConfig.h>
 #include <string.h>
 #include <Arduino.h>
 
@@ -21,10 +23,8 @@
 #define FLUSH_RX     0xE2
 #define NOP_NRF      0xFF
 
-// Radio parameters — must match ML01DP5Transmitter
-static const uint8_t RADIO_CH           = 100;
-static const uint8_t RADIO_ADDR[5]      = {0x57, 0x53, 0x54, 0x41, 0x54}; // "WSTAT"
-static const uint8_t PAYLOAD_LEN        = sizeof(WeatherPacket);            // 24 bytes (packed)
+// Radio parameters from WeatherStationConfig.h — synchronized with transmitter
+// (RADIO_CHANNEL, RADIO_ADDRESS, RADIO_PAYLOAD_LEN, RADIO_RF_SETUP are defined in config)
 
 GT24DipReceiver::GT24DipReceiver(uint8_t cePin, uint8_t csnPin,
                                  uint8_t sckPin, uint8_t mosiPin, uint8_t misoPin)
@@ -93,39 +93,27 @@ bool GT24DipReceiver::begin() {
     writeReg(EN_AA,       0x00); // disable auto-ack
     writeReg(EN_RXADDR,   0x02); // enable pipe 1
     writeReg(SETUP_AW,    0x03); // 5-byte address width
-    writeReg(RF_CH,       RADIO_CH);
-    writeReg(RF_SETUP,    0x06); // 1 Mbps, 0 dBm
-    writeRegBuf(RX_ADDR_P1, RADIO_ADDR, 5);
-    writeReg(RX_PW_P1,    PAYLOAD_LEN);
+    writeReg(RF_CH,       RADIO_CHANNEL);
+    writeReg(RF_SETUP,    RADIO_RF_SETUP);
+    writeRegBuf(RX_ADDR_P1, (uint8_t *)RADIO_ADDRESS, 5);
+    writeReg(RX_PW_P1,    RADIO_PAYLOAD_LEN);
     flushRx();
     writeReg(NRF_STATUS,  0x70); // clear RX_DR | TX_DS | MAX_RT
 
     digitalWrite(_ce, HIGH);     // start listening
     delayMicroseconds(150);
 
-    // Read back CONFIG to verify SPI comms
-    uint8_t cfgReadback = readReg(NRF_CONFIG);
-    uint8_t statusReadback = readReg(NRF_STATUS);
-    Serial.print(F("[GT24] CONFIG=0x")); Serial.print(cfgReadback, HEX);
-    Serial.print(F(" STATUS=0x")); Serial.println(statusReadback, HEX);
-    // CONFIG should be 0x0F, STATUS should be 0x0E (RX_P_NO=7 means FIFO empty)
-
     return true;
 }
 
 bool GT24DipReceiver::receive(WeatherPacket& packet) {
     uint8_t status = readReg(NRF_STATUS);
-    static uint8_t lastStatus = 0xFF;
-    if (status != lastStatus) {
-        Serial.print(F("[GT24] STATUS=0x")); Serial.println(status, HEX);
-        lastStatus = status;
-    }
     if (!(status & (1 << 6))) {  // RX_DR bit
         return false;
     }
 
-    uint8_t buf[PAYLOAD_LEN];
-    readPayload(buf, PAYLOAD_LEN);
+    uint8_t buf[RADIO_PAYLOAD_LEN];
+    readPayload(buf, RADIO_PAYLOAD_LEN);
     writeReg(NRF_STATUS, 1 << 6); // clear RX_DR
 
     // Flush if more data in FIFO
@@ -133,6 +121,9 @@ bool GT24DipReceiver::receive(WeatherPacket& packet) {
         flushRx();
     }
 
-    memcpy(&packet, buf, sizeof(WeatherPacket));
+    // Decrypt payload
+    EncryptedWeatherPacket encrypted;
+    memcpy(&encrypted.data[0], buf, RADIO_PAYLOAD_LEN);
+    RadioEncryption::decrypt(encrypted, packet);
     return true;
 }

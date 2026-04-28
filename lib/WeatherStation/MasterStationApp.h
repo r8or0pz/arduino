@@ -7,6 +7,8 @@
 #include <IBackend.h>
 #include <CloudPublisher.h>
 #include <IRadioReceiver.h>
+#define WEATHER_STATION_MASTER_CONFIG
+#include <WeatherStationConfig.h>
 
 class MasterStationApp {
 public:
@@ -50,10 +52,20 @@ private:
     bool _hasTempTrend;
     bool _hasHumidityTrend;
     bool _hasPressureTrend;
+    bool _hasDewPointTrend;
+    int8_t _lastTempTrendDirection;
+    int8_t _lastHumidityTrendDirection;
+    int8_t _lastPressureTrendDirection;
+    int8_t _lastDewPointTrendDirection;
+    unsigned long _lastTempTrendAt;
+    unsigned long _lastHumidityTrendAt;
+    unsigned long _lastPressureTrendAt;
+    unsigned long _lastDewPointTrendAt;
     uint8_t _lastSequence;
     float _prevTemperature;
     float _prevHumidity;
     float _prevPressure;
+    float _prevDewPoint;
     WeatherPacket _lastPacket;
 
     U8G2_ST7565_JLX12864_F_4W_SW_SPI _display;

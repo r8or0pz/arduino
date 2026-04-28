@@ -1,4 +1,6 @@
 #include "ML01DP5Transmitter.h"
+#include "RadioEncryption.h"
+#include <WeatherStationConfig.h>
 #include <SPI.h>
 #include <string.h>
 
@@ -23,9 +25,8 @@
 #define TX_DS  5
 #define MAX_RT 4
 
-// Radio parameters — must match GT24DipReceiver
-static const uint8_t RADIO_CH      = 100;
-static const uint8_t RADIO_ADDR[5] = {0x57, 0x53, 0x54, 0x41, 0x54}; // "WSTAT"
+// Radio parameters from WeatherStationConfig.h — synchronized with receiver
+// (RADIO_CHANNEL, RADIO_ADDRESS, RADIO_PAYLOAD_LEN, RADIO_RF_SETUP are defined in config)
 
 static const SPISettings NRF_SPI(4000000, MSBFIRST, SPI_MODE0);
 
@@ -90,9 +91,9 @@ bool ML01DP5Transmitter::begin() {
     writeReg(EN_RXADDR,   0x00); // no RX pipes needed
     writeReg(SETUP_AW,    0x03); // 5-byte address width
     writeReg(SETUP_RETR,  0x00); // no retransmit
-    writeReg(RF_CH,       RADIO_CH);
-    writeReg(RF_SETUP,    0x06); // 1 Mbps, 0 dBm
-    writeRegBuf(TX_ADDR, RADIO_ADDR, 5);
+    writeReg(RF_CH,       RADIO_CHANNEL);
+    writeReg(RF_SETUP,    RADIO_RF_SETUP);
+    writeRegBuf(TX_ADDR, (uint8_t *)RADIO_ADDRESS, 5);
     flushTx();
     writeReg(NRF_STATUS,  0x70); // clear RX_DR | TX_DS | MAX_RT
     return true;
@@ -102,14 +103,17 @@ bool ML01DP5Transmitter::send(const WeatherPacket& packet) {
     _lastDebug.sendOk      = false;
     _lastDebug.sequence    = packet.sequence;
     _lastDebug.sentAtMs    = millis();
-    _lastDebug.payloadSize = sizeof(WeatherPacket);
+    _lastDebug.payloadSize = RADIO_PAYLOAD_LEN;
+
+    // Encrypt payload
+    EncryptedWeatherPacket encrypted;
+    RadioEncryption::encrypt(packet, encrypted);
 
     // Write TX payload
-    const uint8_t* buf = reinterpret_cast<const uint8_t*>(&packet);
     SPI.beginTransaction(NRF_SPI);
     digitalWrite(_csn, LOW);
     SPI.transfer(W_TX_PAYLOAD);
-    for (uint8_t i = 0; i < sizeof(WeatherPacket); i++) { SPI.transfer(buf[i]); }
+    for (uint8_t i = 0; i < RADIO_PAYLOAD_LEN; i++) { SPI.transfer(encrypted.data[i]); }
     digitalWrite(_csn, HIGH);
     SPI.endTransaction();
 

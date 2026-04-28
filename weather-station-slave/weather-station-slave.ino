@@ -1,28 +1,19 @@
 #include <Sensors.h>
 #include <WeatherPacket.h>
 #include <ML01DP5Transmitter.h>
+#define WEATHER_STATION_SLAVE_CONFIG
+#include <WeatherStationConfig.h>
 
 namespace {
 
-// Keep sensor wiring aligned with the legacy UNO implementation.
-// Rain digital -> D2, rain analog -> A0, SHT3X -> I2C 0x44, BMP580 -> I2C 0x46(default).
-const int rainDigitalPin = 2;
-const int rainAnalogPin = A0;
-const uint8_t sht3xAddress = 0x44;
-const uint8_t bmp580Address = BMP5XX_DEFAULT_ADDRESS;
-const float stationElevationMeters = 129.0f;
-const unsigned long reportIntervalMs = 2000;
-const unsigned long climateRefreshIntervalMs = 5000;
-const unsigned long debugBaudRate = 115200;
-// nRF24L01 SPI: MOSI=D11, MISO=D12, SCK=D13 (hardware SPI), CE=D9, CSN=D10
-const uint8_t radioCePin  = 9;
-const uint8_t radioCsnPin = 10;
+// Configuration is now centralized in lib/Config/WeatherStationConfig.h
+// All constants (sensor addresses, pin assignments, timing, etc.) are defined there.
 
-RainSensor rainSensor("RainDigital", rainDigitalPin, "RainAnalog", rainAnalogPin);
-Sht3xSensor temperatureSensor("Temperature", sht3xAddress, SHT3X_TEMPERATURE_C);
-Sht3xSensor humiditySensor("Humidity", sht3xAddress, SHT3X_HUMIDITY);
-Bmp580PressureSensor pressureSensor("Pressure", bmp580Address);
-ML01DP5Transmitter radio(radioCePin, radioCsnPin);
+RainSensor rainSensor("RainDigital", RAIN_DIGITAL_PIN, "RainAnalog", RAIN_ANALOG_PIN);
+Sht3xSensor temperatureSensor("Temperature", SHT3X_ADDRESS, SHT3X_TEMPERATURE_C);
+Sht3xSensor humiditySensor("Humidity", SHT3X_ADDRESS, SHT3X_HUMIDITY);
+Bmp580PressureSensor pressureSensor("Pressure", BMP580_ADDRESS);
+ML01DP5Transmitter radio(RADIO_CE_PIN, RADIO_CSN_PIN);
 unsigned long lastReportAt = 0;
 unsigned long lastClimateAt = 0;
 float lastTemperature = NAN;
@@ -62,11 +53,11 @@ void debugPacket(const WeatherPacket& packet, const ML01DP5Transmitter::TxDebugI
 }
 
 float adjustPressureToSeaLevel(float stationPressureHpa) {
-    if (isnan(stationPressureHpa) || stationElevationMeters <= 0.0f) {
+    if (isnan(stationPressureHpa) || STATION_ELEVATION_METERS <= 0.0f) {
         return stationPressureHpa;
     }
 
-    return stationPressureHpa / pow(1.0f - (stationElevationMeters / 44330.0f), 5.255f);
+    return stationPressureHpa / pow(1.0f - (STATION_ELEVATION_METERS / 44330.0f), 5.255f);
 }
 
 float convertPressureToMmHg(float pressureHpa) {
@@ -79,7 +70,7 @@ float convertPressureToMmHg(float pressureHpa) {
 
 bool readClimate(float& temperature, float& humidity, float& pressure, bool& pressureOk) {
     unsigned long now = millis();
-    if (hasClimate && (now - lastClimateAt) < climateRefreshIntervalMs) {
+    if (hasClimate && (now - lastClimateAt) < CLIMATE_REFRESH_INTERVAL_MS) {
         temperature = lastTemperature;
         humidity = lastHumidity;
         pressure = lastPressure;
@@ -138,12 +129,12 @@ bool readClimate(float& temperature, float& humidity, float& pressure, bool& pre
 }
 
 void setup() {
-    Serial.begin(debugBaudRate);
+    Serial.begin(DEBUG_BAUD_RATE);
     debugLog(F("slave boot"));
     Serial.print(F("radio CE="));
-    Serial.print(radioCePin);
+    Serial.print(RADIO_CE_PIN);
     Serial.print(F(" CSN="));
-    Serial.println(radioCsnPin);
+    Serial.println(RADIO_CSN_PIN);
 
     // Temporary: disable rain sensor hardware invocation while keeping implementation in code.
     // rainSensor.begin();
@@ -158,7 +149,7 @@ void setup() {
 
 void loop() {
     unsigned long now = millis();
-    if ((now - lastReportAt) < reportIntervalMs) {
+    if ((now - lastReportAt) < REPORT_INTERVAL_MS) {
         return;
     }
 
